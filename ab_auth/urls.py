@@ -13,9 +13,27 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
+from django.http.request import HttpRequest
 from django.urls import path
+from django.urls.conf import include
+from django.urls.exceptions import Resolver404
+
+from ab_auth.base_views import ping_route, teapot_route
+from ab_auth.errors import NOT_FOUND, error_response
+
+handler404 = 'ab_auth.urls.page_not_found'
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('ping', ping_route),
+    path('teapot', teapot_route),
+    path('auth/', include('auth.urls')),
 ]
+
+
+def page_not_found(request: HttpRequest, exception: Exception):
+    if isinstance(exception, Resolver404):
+        path = exception.args[0]['path']
+        return error_response(NOT_FOUND, {
+            'path': path
+        }, f'The path "{path}" was not found')
+    return error_response(NOT_FOUND, exception.args, str(exception))
