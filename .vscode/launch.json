@@ -8,7 +8,9 @@
             "name": "Python: Auth Server",
             "type": "python",
             "request": "launch",
-            "module": "ab_auth"
+            "program": "${workspaceFolder}/manage.py",
+            "console": "integratedTerminal",
+            "args": ["runserver", "0.0.0.0:8932"]
         }
     ]
 }

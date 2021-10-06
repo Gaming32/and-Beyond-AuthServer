@@ -2,14 +2,15 @@ import functools
 import json
 import re
 import typing
-from typing import Any, Optional, Union
+from typing import Any, AnyStr, Optional, Union
 
-from aiohttp.web import json_response
+from django.http import JsonResponse
 
 KEY_ERROR = 'KeyError'
 FORMAT_ERROR = 'FormatError'
 TYPE_ERROR = 'TypeError'
 NO_SUCH_USER = 'NoSuchUserError'
+NOT_FOUND = 'NotFound'
 UNAUTHORIZED = 'Unauthorized'
 INTERNAL_ERROR = 'InternalError'
 
@@ -18,6 +19,7 @@ ERROR_TYPES = {
     FORMAT_ERROR: 400,
     TYPE_ERROR: 400,
     NO_SUCH_USER: 404,
+    NOT_FOUND: 404,
     UNAUTHORIZED: 401,
     INTERNAL_ERROR: 500,
 }
@@ -31,24 +33,24 @@ def get_type_name(value) -> str:
     return str(value)
 
 
-def error_repsonse(type: str, args: Any = None, human: Optional[str] = None, status: int = None):
+def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, status: int = None):
     if status is None:
         status = ERROR_TYPES.get(type, 400)
-    return json_response({
+    return JsonResponse({
         'human': human,
         'type': type,
         'args': args,
-    }, status=status, dumps=functools.partial(
-        json.dumps, indent=3
+    }, status=status, json_dumps_params=dict(
+        indent=3, default=str
     ))
 
 
-def format_error(value: str, message: Optional[str] = None, **kwargs: Any):
-    return error_repsonse(FORMAT_ERROR, dict(value=value, **kwargs), message)
+def format_error(value: AnyStr, message: Optional[str] = None, **kwargs: Any):
+    return error_response(FORMAT_ERROR, dict(value=value, **kwargs), message)
 
 
 def validate_regex(value: str, regex: str):
-    if re.match(regex, value) is None:
+    if re.fullmatch(regex, value) is None:
         return format_error(value, f'The specified value did not match the regex "{regex}"', regex=regex)
 
 
@@ -57,7 +59,7 @@ def type_error(name: str, expected: Union[type, str], got: Union[type, str]):
         expected = get_type_name(expected)
     if isinstance(got, type):
         got = get_type_name(got)
-    return error_repsonse(TYPE_ERROR, {
+    return error_response(TYPE_ERROR, {
             'arg': 'username',
             'expected': expected,
             'got': got,
