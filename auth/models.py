@@ -1,6 +1,6 @@
 from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models.fields import CharField, UUIDField
+from django.db.models.fields import BinaryField, CharField, UUIDField
 
 from auth import TOKEN_REGEX, USERNAME_REGEX
 
@@ -11,6 +11,4 @@ class User(models.Model):
         RegexValidator(USERNAME_REGEX),
     ])
     password = CharField(max_length=128)
-    token = CharField(max_length=32, unique=True, null=True, default=None, validators=[
-        RegexValidator(TOKEN_REGEX),
-    ])
+    token = BinaryField(max_length=16, unique=True, null=True, default=None)

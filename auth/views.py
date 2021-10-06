@@ -1,6 +1,9 @@
+import binascii
+import hashlib
 import json
 import secrets
 import uuid
+from typing import Union
 
 from ab_auth.errors import (KEY_ERROR, METHOD_NOT_ALLOWED, NO_SUCH_USER,
                             UNAUTHORIZED, ensure_json, error_response,
@@ -13,6 +16,16 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from auth import TOKEN_REGEX
 from auth.models import User
+
+
+def hash_token(token: bytes) -> bytes:
+    return hashlib.sha256(token, usedforsecurity=True).digest()
+
+
+def user_by_token(token: Union[str, bytes]) -> User:
+    if isinstance(token, str):
+        token = binascii.a2b_hex(token)
+    return User.objects.get(token=hash_token(token))
 
 
 def login_route(request: HttpRequest) -> HttpResponse:
@@ -37,8 +50,8 @@ def login_route(request: HttpRequest) -> HttpResponse:
     if not check_password_hash(user.password, password):
         return error_response(UNAUTHORIZED, 'password', 'The specified password is incorrect')
     for _ in range(8): # Eight attempts (we should never hit this limit)
-        token = secrets.token_hex(16)
-        user.token = token
+        token = secrets.token_bytes(16)
+        user.token = hash_token(token)
         try:
             user.save()
         except IntegrityError:
@@ -47,16 +60,15 @@ def login_route(request: HttpRequest) -> HttpResponse:
     else:
         raise RuntimeError('Failed to find unique token (tried 8 times)')
     return JsonResponse({
-        'token': token,
-        'uuid': str(user.unique_id),
-    })
+        'token': binascii.b2a_hex(token).decode('ascii'),
+    } | jsonify_user(user))
 
 
 def logout_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
     try:
-        user = User.objects.get(token=token)
+        user = user_by_token(token)
     except User.DoesNotExist:
         return error_response(UNAUTHORIZED, {'token': token}, f'The token "{token}" is invalid')
     user.token = None
@@ -79,7 +91,7 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
     try:
-        user = User.objects.get(token=token)
+        user = user_by_token(token)
     except User.DoesNotExist:
         return error_response(UNAUTHORIZED, {'token': token}, f'No user with the token "{token}"')
     method = 'GET' if request.method is None else request.method
