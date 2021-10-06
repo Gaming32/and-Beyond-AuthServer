@@ -14,6 +14,7 @@ UNAUTHORIZED = 'Unauthorized'
 NO_SUCH_USER = 'NoSuchUserError'
 NOT_FOUND = 'NotFound'
 METHOD_NOT_ALLOWED = 'MethodNotAllowed'
+CONFLICT = 'Conflict'
 INTERNAL_ERROR = 'InternalError'
 
 ERROR_TYPES = {
@@ -24,6 +25,7 @@ ERROR_TYPES = {
     NO_SUCH_USER: 404,
     NOT_FOUND: 404,
     METHOD_NOT_ALLOWED: 405,
+    CONFLICT: 409,
     INTERNAL_ERROR: 500,
 }
 

@@ -5,7 +5,7 @@ import secrets
 import uuid
 from typing import Union
 
-from ab_auth.errors import (KEY_ERROR, METHOD_NOT_ALLOWED, NO_SUCH_USER,
+from ab_auth.errors import (CONFLICT, KEY_ERROR, METHOD_NOT_ALLOWED, NO_SUCH_USER,
                             UNAUTHORIZED, ensure_json, error_response,
                             format_error, method_not_allowed, type_error,
                             validate_regex)
@@ -14,7 +14,7 @@ from django.http.request import HttpRequest
 from django.http.response import HttpResponse, JsonResponse
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from auth import TOKEN_REGEX
+from auth import TOKEN_REGEX, USERNAME_REGEX
 from auth.models import User
 
 
@@ -114,7 +114,10 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
             user.password = generate_password_hash(password)
             changes += 1
         if changes:
-            user.save()
+            try:
+                user.save()
+            except IntegrityError:
+                return error_response(CONFLICT, None, 'That username is already in use')
         return JsonResponse({'changes': changes})
     elif method == 'DELETE':
         user_data = jsonify_user(user)
@@ -133,5 +136,15 @@ def uuid_route(request: HttpRequest, id_str: str) -> HttpResponse:
     try:
         user = User.objects.get(unique_id=user_id)
     except User.DoesNotExist:
-        return error_response(NO_SUCH_USER, {'uuid': id_str}, f'No user with uuid "{id_str}"')
+        return error_response(NO_SUCH_USER, {'uuid': id_str}, f'No user exists with the uuid "{id_str}"')
+    return get_user_response(user)
+
+
+def username_route(request: HttpRequest, username: str) -> HttpResponse:
+    if (error := validate_regex(username, USERNAME_REGEX)) is not None:
+        return error
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return error_response(NO_SUCH_USER, {'username': username}, f'No user exists with the username "{username}"')
     return get_user_response(user)
