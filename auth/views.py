@@ -27,6 +27,22 @@ def user_by_token(token: Union[str, bytes]) -> User:
     return User.objects.get(token=hash_token(token))
 
 
+def login(user: User) -> dict:
+    for _ in range(8): # Eight attempts (we should never hit this limit)
+        token = secrets.token_bytes(16)
+        user.token = hash_token(token)
+        try:
+            user.save()
+        except IntegrityError:
+            continue
+        break
+    else:
+        raise RuntimeError('Failed to find unique token (tried 8 times)')
+    return {
+        'token': binascii.b2a_hex(token).decode('ascii'),
+    } | jsonify_user(user)
+
+
 @custom_ratelimit(key='ip', rate='25/s')
 @custom_ratelimit(key='post:username', rate='12/m')
 def login_route(request: HttpRequest) -> HttpResponse:
@@ -45,24 +61,12 @@ def login_route(request: HttpRequest) -> HttpResponse:
     if not isinstance(password, str):
         return type_error('password', str, type(password))
     try:
-        user = User.objects.get(username=username)
+        user: User = User.objects.get(username=username)
     except User.DoesNotExist:
         return error_response(UNAUTHORIZED, 'username', 'The specified user does not exist')
     if not check_password_hash(user.password, password):
         return error_response(UNAUTHORIZED, 'password', 'The specified password is incorrect')
-    for _ in range(8): # Eight attempts (we should never hit this limit)
-        token = secrets.token_bytes(16)
-        user.token = hash_token(token)
-        try:
-            user.save()
-        except IntegrityError:
-            continue
-        break
-    else:
-        raise RuntimeError('Failed to find unique token (tried 8 times)')
-    return JsonResponse({
-        'token': binascii.b2a_hex(token).decode('ascii'),
-    } | jsonify_user(user))
+    return JsonResponse(login(user))
 
 
 @custom_ratelimit(key='ip', rate='25/s')
@@ -121,7 +125,7 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
             try:
                 user.save()
             except IntegrityError:
-                return error_response(CONFLICT, None, 'That username is already in use')
+                return error_response(CONFLICT, 'username', 'That username is already in use')
         return JsonResponse({'changes': changes})
     elif method == 'DELETE':
         user_data = jsonify_user(user)
@@ -154,3 +158,30 @@ def username_route(request: HttpRequest, username: str) -> HttpResponse:
     except User.DoesNotExist:
         return error_response(NO_SUCH_USER, {'username': username}, f'No user exists with the username "{username}"')
     return get_user_response(user)
+
+
+@custom_ratelimit(key='ip', rate='25/s')
+@custom_ratelimit(key='post:username', rate='12/m')
+def create_user_route(request: HttpRequest) -> HttpResponse:
+    if isinstance(info := ensure_json(request), HttpResponse):
+        return info
+    missing = []
+    for key in ('username', 'password'):
+        if key not in info:
+            missing.append(key)
+    if missing:
+        return error_response(KEY_ERROR, missing, f'Missing the following login parameters: {", ".join(missing)}')
+    username = info.get('username')
+    password = info.get('password')
+    if not isinstance(username, str):
+        return type_error('username', str, type(username))
+    if not isinstance(password, str):
+        return type_error('password', str, type(password))
+    password_hash = generate_password_hash(password)
+    unique_id = uuid.uuid4()
+    user = User(unique_id=unique_id, username=username, password=password_hash)
+    try:
+        user.save()
+    except IntegrityError:
+        return error_response(CONFLICT, 'username', 'That username is already in use')
+    return JsonResponse(login(user))
