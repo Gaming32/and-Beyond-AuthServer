@@ -90,6 +90,7 @@ def get_user_response(user: User) -> HttpResponse:
 
 
 @custom_ratelimit(key='ip', rate='25/s')
+@custom_ratelimit(key='post:username', rate='3/m')
 def profile_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
