@@ -1,14 +1,13 @@
 import binascii
 import hashlib
-import json
 import secrets
 import uuid
 from typing import Union
 
-from ab_auth.errors import (CONFLICT, KEY_ERROR, METHOD_NOT_ALLOWED, NO_SUCH_USER,
-                            UNAUTHORIZED, ensure_json, error_response,
-                            format_error, method_not_allowed, type_error,
-                            validate_regex)
+from ab_auth.decorators import custom_ratelimit
+from ab_auth.errors import (CONFLICT, KEY_ERROR, NO_SUCH_USER, UNAUTHORIZED,
+                            ensure_json, error_response, format_error,
+                            method_not_allowed, type_error, validate_regex)
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse, JsonResponse
@@ -28,6 +27,8 @@ def user_by_token(token: Union[str, bytes]) -> User:
     return User.objects.get(token=hash_token(token))
 
 
+@custom_ratelimit(key='ip', rate='25/s')
+@custom_ratelimit(key='post:username', rate='12/m')
 def login_route(request: HttpRequest) -> HttpResponse:
     if isinstance(info := ensure_json(request), HttpResponse):
         return info
@@ -64,6 +65,7 @@ def login_route(request: HttpRequest) -> HttpResponse:
     } | jsonify_user(user))
 
 
+@custom_ratelimit(key='ip', rate='25/s')
 def logout_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
@@ -87,6 +89,7 @@ def get_user_response(user: User) -> HttpResponse:
     return JsonResponse(jsonify_user(user))
 
 
+@custom_ratelimit(key='ip', rate='25/s')
 def profile_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
@@ -127,6 +130,7 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
         return method_not_allowed(method, ['GET', 'POST', 'DELETE'])
 
 
+@custom_ratelimit(key='ip', rate='50/s')
 def uuid_route(request: HttpRequest, id_str: str) -> HttpResponse:
     try:
         user_id = uuid.UUID(id_str)
@@ -140,6 +144,7 @@ def uuid_route(request: HttpRequest, id_str: str) -> HttpResponse:
     return get_user_response(user)
 
 
+@custom_ratelimit(key='ip', rate='50/s')
 def username_route(request: HttpRequest, username: str) -> HttpResponse:
     if (error := validate_regex(username, USERNAME_REGEX)) is not None:
         return error

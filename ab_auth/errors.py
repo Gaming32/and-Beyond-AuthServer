@@ -2,7 +2,7 @@ import functools
 import json
 import re
 import typing
-from typing import Any, AnyStr, Iterable, Optional, Union
+from typing import Any, AnyStr, Iterable, Optional, TypedDict, Union
 
 from django.http import JsonResponse
 from django.http.request import HttpRequest
@@ -15,6 +15,7 @@ NO_SUCH_USER = 'NoSuchUserError'
 NOT_FOUND = 'NotFound'
 METHOD_NOT_ALLOWED = 'MethodNotAllowed'
 CONFLICT = 'Conflict'
+RATELIMIT = 'Ratelimited'
 INTERNAL_ERROR = 'InternalError'
 
 ERROR_TYPES = {
@@ -26,8 +27,16 @@ ERROR_TYPES = {
     NOT_FOUND: 404,
     METHOD_NOT_ALLOWED: 405,
     CONFLICT: 409,
+    RATELIMIT: 429,
     INTERNAL_ERROR: 500,
 }
+
+
+class _RatelimitDict(TypedDict):
+    count: int
+    limit: int
+    should_limit: bool
+    time_left: int
 
 
 def get_type_name(value) -> str:
@@ -38,7 +47,7 @@ def get_type_name(value) -> str:
     return str(value)
 
 
-def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, status: int = None):
+def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, status: int = None, headers=None):
     if status is None:
         status = ERROR_TYPES.get(type, 400)
     return JsonResponse({
@@ -47,7 +56,7 @@ def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, 
         'args': args,
     }, status=status, json_dumps_params=dict(
         indent=3, default=str
-    ))
+    ), headers=headers)
 
 
 def format_error(value: AnyStr, message: Optional[str] = None, **kwargs: Any):
@@ -86,3 +95,19 @@ def method_not_allowed(method: str, allowed_methods: Iterable[str] = ('GET',)) -
         'method': method,
         'allowed': allowed_methods
     }, f'Request used method {method}, but this route only allows the following methods: {", ".join(allowed_methods)}')
+
+
+def ratelimit_error(ratelimit_info: Optional[_RatelimitDict]) -> JsonResponse:
+    if ratelimit_info is None:
+        return error_response(RATELIMIT)
+    return error_response(
+        RATELIMIT, {
+            'count': ratelimit_info['count'],
+            'limit': ratelimit_info['limit'],
+            'retry_after': ratelimit_info['time_left'],
+        },
+        f'You have encountered a ratelimit! Please try again in {ratelimit_info["time_left"]} seconds.',
+        headers={
+            'Retry-After': ratelimit_info['time_left'],
+        }
+    )

@@ -3,8 +3,9 @@ from typing import Callable
 
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse
+from ratelimit.exceptions import Ratelimited
 
-from ab_auth.errors import INTERNAL_ERROR, error_response
+from ab_auth.errors import INTERNAL_ERROR, error_response, ratelimit_error
 
 GetResponse = Callable[[HttpRequest], HttpResponse]
 
@@ -19,6 +20,8 @@ class ProductionMiddleware:
         return self.func(request)
 
     def process_exception(self, request: HttpRequest, exception: Exception) -> HttpResponse:
+        if isinstance(exception, Ratelimited):
+            return ratelimit_error(exception.args[0])
         logging.error('An internal error occurred in %s.%s', self.func.__module__, self.func.__qualname__, exc_info=exception)
         exc_str = str(exception)
         exc_text = exception.__class__.__qualname__ + (f': {exc_str}' if exc_str else '')
