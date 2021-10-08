@@ -2,3 +2,4 @@ django
 django-ratelimit
 werkzeug
 python-dotenv
+zxcvbn

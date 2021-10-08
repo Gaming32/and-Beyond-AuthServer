@@ -1,9 +1,9 @@
-import functools
 import json
 import re
 import typing
 from typing import Any, AnyStr, Iterable, Optional, TypedDict, Union
 
+import zxcvbn
 from django.http import JsonResponse
 from django.http.request import HttpRequest
 
@@ -11,6 +11,7 @@ KEY_ERROR = 'KeyError'
 FORMAT_ERROR = 'FormatError'
 TYPE_ERROR = 'TypeError'
 UNAUTHORIZED = 'Unauthorized'
+INSECURITY = 'InsecurityError'
 NO_SUCH_USER = 'NoSuchUserError'
 NOT_FOUND = 'NotFound'
 METHOD_NOT_ALLOWED = 'MethodNotAllowed'
@@ -23,6 +24,7 @@ ERROR_TYPES = {
     FORMAT_ERROR: 400,
     TYPE_ERROR: 400,
     UNAUTHORIZED: 401,
+    INSECURITY: 401,
     NO_SUCH_USER: 404,
     NOT_FOUND: 404,
     METHOD_NOT_ALLOWED: 405,
@@ -111,3 +113,22 @@ def ratelimit_error(ratelimit_info: Optional[_RatelimitDict]) -> JsonResponse:
             'Retry-After': ratelimit_info['time_left'],
         }
     )
+
+
+def verify_password_security(password: str, username: Optional[str] = None) -> Optional[JsonResponse]:
+    user_info = []
+    if username is not None:
+        user_info.append(username)
+    zxcvbn_info = zxcvbn.zxcvbn(password, None if user_info is None else user_info)
+    if zxcvbn_info['score'] < 2: # Not secure enough
+        human = (f"Your password had a score of {zxcvbn_info['score']}, "
+                  "but a minimum of 2 is required.")
+        if warning := zxcvbn_info['feedback']['warning']:
+            human += '\nWarning: ' + warning
+        if suggestions := zxcvbn_info['feedback']['suggestions']:
+            human += "\nHere's a list of suggestions to make your password stronger:"
+            for suggestion in suggestions:
+                human += '\n  + ' + suggestion
+        zxcvbn_info.pop('password', None) # Don't send the password back over the network
+        return error_response(INSECURITY, zxcvbn_info, human)
+    return None

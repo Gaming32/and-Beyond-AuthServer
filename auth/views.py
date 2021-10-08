@@ -7,7 +7,8 @@ from typing import Union
 from ab_auth.decorators import custom_ratelimit
 from ab_auth.errors import (CONFLICT, KEY_ERROR, NO_SUCH_USER, UNAUTHORIZED,
                             ensure_json, error_response, format_error,
-                            method_not_allowed, type_error, validate_regex)
+                            method_not_allowed, type_error, validate_regex,
+                            verify_password_security)
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse, JsonResponse
@@ -109,19 +110,27 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
         if isinstance(info := ensure_json(request), HttpResponse):
             return info
         changes = 0
+        change_username = None
         if 'username' in info:
             username = info.pop('username')
             if not isinstance(username, str):
                 return type_error('username', str, type(username))
-            user.username = username
+            change_username = username
             changes += 1
+        change_password = None
         if 'password' in info:
             password = info.pop('password')
             if not isinstance(password, str):
                 return type_error('password', str, type(password))
-            user.password = generate_password_hash(password)
+            if (error := verify_password_security(password, change_username or user.username)) is not None:
+                return error
+            change_password = generate_password_hash(password)
             changes += 1
         if changes:
+            if change_username is not None:
+                user.username = change_username
+            if change_password is not None:
+                user.password = change_password
             try:
                 user.save()
             except IntegrityError:
@@ -177,6 +186,8 @@ def create_user_route(request: HttpRequest) -> HttpResponse:
         return type_error('username', str, type(username))
     if not isinstance(password, str):
         return type_error('password', str, type(password))
+    if (error := verify_password_security(password, username)) is not None:
+        return error
     password_hash = generate_password_hash(password)
     unique_id = uuid.uuid4()
     user = User(unique_id=unique_id, username=username, password=password_hash)
