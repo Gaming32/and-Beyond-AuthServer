@@ -11,4 +11,4 @@ class User(models.Model):
         RegexValidator(USERNAME_REGEX),
     ])
     password = CharField(max_length=128)
-    token = BinaryField(max_length=16, unique=True, null=True, default=None)
+    token = BinaryField(max_length=32, unique=True, null=True, default=None)
