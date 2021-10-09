@@ -1,14 +1,13 @@
 import binascii
-import hashlib
 import secrets
 import uuid
-from typing import Union
 
 from ab_auth.decorators import custom_ratelimit
 from ab_auth.errors import (CONFLICT, KEY_ERROR, NO_SUCH_USER, UNAUTHORIZED,
                             ensure_json, error_response, format_error,
                             method_not_allowed, type_error, validate_regex,
                             verify_password_security)
+from ab_auth.utils import get_keys, hash_token, stringify_token
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse, JsonResponse
@@ -16,16 +15,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from auth import TOKEN_REGEX, USERNAME_REGEX
 from auth.models import User
-
-
-def hash_token(token: bytes) -> bytes:
-    return hashlib.sha256(token, usedforsecurity=True).digest()
-
-
-def user_by_token(token: Union[str, bytes]) -> User:
-    if isinstance(token, str):
-        token = binascii.a2b_hex(token)
-    return User.objects.get(token=hash_token(token))
 
 
 def login(user: User) -> dict:
@@ -40,27 +29,17 @@ def login(user: User) -> dict:
     else:
         raise RuntimeError('Failed to find unique token (tried 8 times)')
     return {
-        'token': binascii.b2a_hex(token).decode('ascii'),
-    } | jsonify_user(user)
+        'token': stringify_token(token),
+    } | user.dictify()
 
 
 @custom_ratelimit(key='ip', rate='25/s')
 @custom_ratelimit(key='post:username', rate='12/m')
 def login_route(request: HttpRequest) -> HttpResponse:
-    if isinstance(info := ensure_json(request), HttpResponse):
+    if isinstance(info := get_keys(request, username=str, password=str), HttpResponse):
         return info
-    missing = []
-    for key in ('username', 'password'):
-        if key not in info:
-            missing.append(key)
-    if missing:
-        return error_response(KEY_ERROR, missing, f'Missing the following login parameters: {", ".join(missing)}')
-    username = info.get('username')
-    password = info.get('password')
-    if not isinstance(username, str):
-        return type_error('username', str, type(username))
-    if not isinstance(password, str):
-        return type_error('password', str, type(password))
+    username = info['username']
+    password = info['password']
     try:
         user: User = User.objects.get(username=username)
     except User.DoesNotExist:
@@ -75,7 +54,7 @@ def logout_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
     try:
-        user = user_by_token(token)
+        user = User.by_token(token)
     except User.DoesNotExist:
         return error_response(UNAUTHORIZED, {'token': token}, f'The token "{token}" is invalid')
     user.token = None
@@ -83,15 +62,8 @@ def logout_route(request: HttpRequest, token: str) -> HttpResponse:
     return HttpResponse(status=204)
 
 
-def jsonify_user(user: User):
-    return {
-        'uuid': str(user.unique_id),
-        'username': user.username,
-    }
-
-
 def get_user_response(user: User) -> HttpResponse:
-    return JsonResponse(jsonify_user(user))
+    return JsonResponse(user.dictify())
 
 
 @custom_ratelimit(key='ip', rate='25/s')
@@ -100,7 +72,7 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
     if (error := validate_regex(token, TOKEN_REGEX)) is not None:
         return error
     try:
-        user = user_by_token(token)
+        user = User.by_token(token)
     except User.DoesNotExist:
         return error_response(UNAUTHORIZED, {'token': token}, f'No user with the token "{token}"')
     method = 'GET' if request.method is None else request.method
@@ -137,7 +109,7 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
                 return error_response(CONFLICT, 'username', 'That username is already in use')
         return JsonResponse({'changes': changes})
     elif method == 'DELETE':
-        user_data = jsonify_user(user)
+        user_data = user.dictify()
         user.delete()
         return JsonResponse({'deleted': user_data})
     else:
@@ -172,20 +144,10 @@ def username_route(request: HttpRequest, username: str) -> HttpResponse:
 @custom_ratelimit(key='ip', rate='25/s')
 @custom_ratelimit(key='post:username', rate='12/m')
 def create_user_route(request: HttpRequest) -> HttpResponse:
-    if isinstance(info := ensure_json(request), HttpResponse):
+    if isinstance(info := get_keys(request, username=str, password=str), HttpResponse):
         return info
-    missing = []
-    for key in ('username', 'password'):
-        if key not in info:
-            missing.append(key)
-    if missing:
-        return error_response(KEY_ERROR, missing, f'Missing the following login parameters: {", ".join(missing)}')
-    username = info.get('username')
-    password = info.get('password')
-    if not isinstance(username, str):
-        return type_error('username', str, type(username))
-    if not isinstance(password, str):
-        return type_error('password', str, type(password))
+    username = info['username']
+    password = info['password']
     if (error := verify_password_security(password, username)) is not None:
         return error
     password_hash = generate_password_hash(password)

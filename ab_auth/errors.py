@@ -1,11 +1,12 @@
 import json
 import re
 import typing
-from typing import Any, AnyStr, Iterable, Optional, TypedDict, Union
+from typing import Any, AnyStr, Iterable, Optional, Pattern, TypedDict, Union
 
 import zxcvbn
 from django.http import JsonResponse
 from django.http.request import HttpRequest
+from django.http.response import HttpResponse
 
 KEY_ERROR = 'KeyError'
 FORMAT_ERROR = 'FormatError'
@@ -13,6 +14,7 @@ TYPE_ERROR = 'TypeError'
 UNAUTHORIZED = 'Unauthorized'
 INSECURITY = 'InsecurityError'
 NO_SUCH_USER = 'NoSuchUserError'
+NO_SUCH_SESSION = 'NoSuchSessionError'
 NOT_FOUND = 'NotFound'
 METHOD_NOT_ALLOWED = 'MethodNotAllowed'
 CONFLICT = 'Conflict'
@@ -26,6 +28,7 @@ ERROR_TYPES = {
     UNAUTHORIZED: 401,
     INSECURITY: 401,
     NO_SUCH_USER: 404,
+    NO_SUCH_SESSION: 404,
     NOT_FOUND: 404,
     METHOD_NOT_ALLOWED: 405,
     CONFLICT: 409,
@@ -65,12 +68,12 @@ def format_error(value: AnyStr, message: Optional[str] = None, **kwargs: Any):
     return error_response(FORMAT_ERROR, dict(value=value, **kwargs), message)
 
 
-def validate_regex(value: str, regex: str):
+def validate_regex(value: str, regex: Union[str, Pattern]):
     if re.fullmatch(regex, value) is None:
         return format_error(value, f'The specified value did not match the regex "{regex}"', regex=regex)
 
 
-def ensure_json(request: HttpRequest):
+def ensure_json(request: HttpRequest) -> Union[dict, HttpResponse]:
     try:
         return json.loads(request.body)
     except ValueError:
