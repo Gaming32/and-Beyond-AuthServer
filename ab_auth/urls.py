@@ -27,6 +27,7 @@ urlpatterns = [
     path('ping', ping_route),
     path('teapot', teapot_route),
     path('auth/', include('auth.urls')),
+    path('sessions/', include('sessions.urls')),
 ]
 
 
