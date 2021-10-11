@@ -1,8 +1,10 @@
+import binascii
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from ab_auth.decorators import custom_ratelimit
-from ab_auth.errors import (NO_SUCH_SESSION, UNAUTHORIZED, ensure_json,
-                            error_response, format_error, validate_regex)
+from ab_auth.errors import (NO_SUCH_SESSION, UNAUTHORIZED, error_response,
+                            format_error, validate_regex)
 from ab_auth.utils import get_keys, hash_token, stringify_token
 from auth import TOKEN_REGEX
 from auth.models import User
@@ -18,12 +20,15 @@ def get_session_response(session: Session) -> HttpResponse:
 
 @custom_ratelimit(key='ip', rate='25/s')
 def new_session_route(request: HttpRequest) -> HttpResponse:
-    if isinstance(info := get_keys(request, user_token=str, server_address=str), HttpResponse):
+    if isinstance(info := get_keys(request, user_token=str, public_key=str), HttpResponse):
         return info
     from_token = info['user_token']
-    with_address = info['server_address']
-    if len(with_address) > 259:
-        return format_error(with_address, 'The server address must be 259 characters or less')
+    try:
+        with_key = binascii.a2b_base64(info['public_key'])
+    except ValueError:
+        return format_error(info['public_key'], f'Invalid Base64: {info["public_key"]}')
+    if len(with_key) > 64:
+        return format_error(with_key, 'The authentication key must be 64 bytes or less')
     if (error := validate_regex(from_token, TOKEN_REGEX)) is not None:
         return error
     try:
@@ -33,7 +38,8 @@ def new_session_route(request: HttpRequest) -> HttpResponse:
     session_token = secrets.token_bytes(16)
     session = Session(
         token=hash_token(session_token),
-        server_address=with_address,
+        public_key=with_key,
+        expiry=datetime.now(timezone.utc) + timedelta(seconds=61),
         user=user,
     )
     session.save()
