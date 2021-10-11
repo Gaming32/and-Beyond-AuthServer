@@ -1,0 +1,35 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Create Django migrations",
+            "type": "shell",
+            "command": [
+                "${config:python.pythonPath}",
+                "${workspaceFolder}/manage.py",
+                "makemigrations"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Django migrations",
+            "type": "shell",
+            "command": [
+                "${config:python.pythonPath}",
+                "${workspaceFolder}/manage.py",
+                "migrate"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Remove expired sessions",
+            "type": "shell",
+            "command": [
+                "${config:python.pythonPath}",
+                "${workspaceFolder}/manage.py",
+                "expiresessions"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}
