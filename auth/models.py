@@ -4,14 +4,16 @@ from typing import TypedDict, Union
 from ab_auth.utils import hash_token
 from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models.fields import BinaryField, CharField, UUIDField
+from django.db.models.fields import (BinaryField, CharField, DateTimeField,
+                                     UUIDField)
 
-from auth import TOKEN_REGEX, USERNAME_REGEX
+from auth import USERNAME_REGEX
 
 
 class _UserDict(TypedDict):
     uuid: str
     username: str
+    join_date: str
 
 
 class User(models.Model):
@@ -20,6 +22,7 @@ class User(models.Model):
         RegexValidator(USERNAME_REGEX),
     ])
     password = CharField(max_length=128)
+    join_date = DateTimeField()
     token = BinaryField(max_length=32, unique=True, null=True, default=None)
 
     @staticmethod
@@ -32,4 +35,5 @@ class User(models.Model):
         return {
             'uuid': str(self.unique_id),
             'username': self.username,
+            'join_date': self.join_date.isoformat(),
         }
