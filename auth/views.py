@@ -1,10 +1,10 @@
-import binascii
 import secrets
 import uuid
+from datetime import datetime, timezone
 
 from ab_auth.decorators import custom_ratelimit
-from ab_auth.errors import (CONFLICT, KEY_ERROR, NO_SUCH_USER, UNAUTHORIZED,
-                            ensure_json, error_response, format_error,
+from ab_auth.errors import (CONFLICT, NO_SUCH_USER, UNAUTHORIZED, ensure_json,
+                            error_response, format_error, key_error,
                             method_not_allowed, type_error, validate_regex,
                             verify_password_security)
 from ab_auth.utils import get_keys, hash_token, stringify_token
@@ -92,8 +92,15 @@ def profile_route(request: HttpRequest, token: str) -> HttpResponse:
         change_password = None
         if 'password' in info:
             password = info.pop('password')
+            old_password = info.pop('old_password', None)
+            if old_password is None:
+                return key_error('old_password')
             if not isinstance(password, str):
                 return type_error('password', str, type(password))
+            if not isinstance(old_password, str):
+                return type_error('old_password', str, type(old_password))
+            if not check_password_hash(user.password, old_password):
+                return error_response(UNAUTHORIZED, 'password', 'The specified old password is incorrect')
             if (error := verify_password_security(password, change_username or user.username)) is not None:
                 return error
             change_password = generate_password_hash(password)
@@ -152,7 +159,7 @@ def create_user_route(request: HttpRequest) -> HttpResponse:
         return error
     password_hash = generate_password_hash(password)
     unique_id = uuid.uuid4()
-    user = User(unique_id=unique_id, username=username, password=password_hash)
+    user = User(unique_id=unique_id, username=username, password=password_hash, join_date=datetime.now(timezone.utc))
     try:
         user.save()
     except IntegrityError:

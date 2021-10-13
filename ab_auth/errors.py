@@ -52,7 +52,7 @@ def get_type_name(value) -> str:
     return str(value)
 
 
-def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, status: int = None, headers=None):
+def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, status: int = None, headers=None) -> JsonResponse:
     if status is None:
         status = ERROR_TYPES.get(type, 400)
     return JsonResponse({
@@ -64,16 +64,22 @@ def error_response(type: str, args: Any = None, human: Optional[AnyStr] = None, 
     ), headers=headers)
 
 
-def format_error(value: AnyStr, message: Optional[str] = None, **kwargs: Any):
+def key_error(missing: Union[str, list[str]]) -> JsonResponse:
+    if isinstance(missing, str):
+        missing = [missing]
+    return error_response(KEY_ERROR, missing, f'Missing the following parameters: {", ".join(missing)}')
+
+
+def format_error(value: AnyStr, message: Optional[str] = None, **kwargs: Any) -> JsonResponse:
     return error_response(FORMAT_ERROR, dict(value=value, **kwargs), message)
 
 
-def validate_regex(value: str, regex: Union[str, Pattern]):
+def validate_regex(value: str, regex: Union[str, Pattern]) -> Optional[JsonResponse]:
     if re.fullmatch(regex, value) is None:
         return format_error(value, f'The specified value did not match the regex "{regex}"', regex=regex)
 
 
-def ensure_json(request: HttpRequest) -> Union[dict, HttpResponse]:
+def ensure_json(request: HttpRequest) -> Union[dict, JsonResponse]:
     try:
         return json.loads(request.body)
     except ValueError:
@@ -82,7 +88,7 @@ def ensure_json(request: HttpRequest) -> Union[dict, HttpResponse]:
         return format_error(text, f'Invalid JSON: {text}')
 
 
-def type_error(name: str, expected: Union[type, str], got: Union[type, str]):
+def type_error(name: str, expected: Union[type, str], got: Union[type, str]) -> JsonResponse:
     if isinstance(expected, type):
         expected = get_type_name(expected)
     if isinstance(got, type):
