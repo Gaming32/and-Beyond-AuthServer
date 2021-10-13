@@ -27,8 +27,8 @@ def new_session_route(request: HttpRequest) -> HttpResponse:
         with_key = binascii.a2b_base64(info['public_key'])
     except ValueError:
         return format_error(info['public_key'], f'Invalid Base64: {info["public_key"]}')
-    if len(with_key) > 64:
-        return format_error(with_key, 'The authentication key must be 64 bytes or less')
+    if len(with_key) > 255:
+        return format_error(with_key, 'The authentication key must be 255 bytes or less')
     if (error := validate_regex(from_token, TOKEN_REGEX)) is not None:
         return error
     try:

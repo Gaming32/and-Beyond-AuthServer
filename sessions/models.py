@@ -18,7 +18,7 @@ class _SessionDict(TypedDict):
 
 class Session(models.Model):
     token = BinaryField(max_length=32, primary_key=True, unique=True)
-    public_key = BinaryField(max_length=64) # I've found that it's generally 48 bytes, but I want a little margin
+    public_key = BinaryField(max_length=255)
     expiry = DateTimeField()
     user = ForeignKey(User, on_delete=CASCADE)
 
