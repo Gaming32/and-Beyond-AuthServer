@@ -1,11 +1,11 @@
-import binascii
+import base64
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from ab_auth.decorators import custom_ratelimit
 from ab_auth.errors import (NO_SUCH_SESSION, UNAUTHORIZED, error_response,
                             format_error, validate_regex)
-from ab_auth.utils import get_keys, hash_token, stringify_token
+from ab_auth.utils import get_keys, hash_token
 from auth import TOKEN_REGEX
 from auth.models import User
 from django.http.request import HttpRequest
@@ -24,7 +24,7 @@ def new_session_route(request: HttpRequest) -> HttpResponse:
         return info
     from_token = info['user_token']
     try:
-        with_key = binascii.a2b_base64(info['public_key'])
+        with_key = base64.b64decode(info['public_key'])
     except ValueError:
         return format_error(info['public_key'], f'Invalid Base64: {info["public_key"]}')
     if len(with_key) > 255:
@@ -44,7 +44,7 @@ def new_session_route(request: HttpRequest) -> HttpResponse:
     )
     session.save()
     return JsonResponse({
-        'session_token': stringify_token(session_token),
+        'session_token': session_token.hex(),
     } | session.dictify())
 
 

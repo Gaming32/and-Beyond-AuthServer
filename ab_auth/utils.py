@@ -1,4 +1,3 @@
-import binascii
 import hashlib
 from typing import Any, Union
 
@@ -10,10 +9,6 @@ from ab_auth.errors import ensure_json, key_error, type_error
 
 def hash_token(token: bytes) -> bytes:
     return hashlib.sha256(token, usedforsecurity=True).digest()
-
-
-def stringify_token(token: bytes) -> str:
-    return binascii.b2a_hex(token).decode('ascii')
 
 
 def get_keys(request: HttpRequest, **keys: type) -> Union[dict[str, Any], HttpResponse]:

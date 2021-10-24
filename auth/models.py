@@ -1,4 +1,3 @@
-import binascii
 from typing import TypedDict, Union
 
 from ab_auth.utils import hash_token
@@ -28,7 +27,7 @@ class User(models.Model):
     @staticmethod
     def by_token(token: Union[str, bytes]) -> 'User':
         if isinstance(token, str):
-            token = binascii.a2b_hex(token)
+            token = bytes.fromhex(token)
         return User.objects.get(token=hash_token(token))
 
     def dictify(self) -> _UserDict:

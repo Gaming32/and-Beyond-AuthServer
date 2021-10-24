@@ -7,7 +7,7 @@ from ab_auth.errors import (CONFLICT, NO_SUCH_USER, UNAUTHORIZED, ensure_json,
                             error_response, format_error, key_error,
                             method_not_allowed, type_error, validate_regex,
                             verify_password_security)
-from ab_auth.utils import get_keys, hash_token, stringify_token
+from ab_auth.utils import get_keys, hash_token
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse, JsonResponse
@@ -29,7 +29,7 @@ def login(user: User) -> dict:
     else:
         raise RuntimeError('Failed to find unique token (tried 8 times)')
     return {
-        'token': stringify_token(token),
+        'token': token.hex(),
     } | user.dictify()
 
 

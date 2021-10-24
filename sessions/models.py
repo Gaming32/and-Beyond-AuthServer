@@ -1,4 +1,4 @@
-import binascii
+import base64
 from datetime import datetime, timezone
 from typing import TypedDict, Union
 
@@ -25,7 +25,7 @@ class Session(models.Model):
     @staticmethod
     def by_token(token: Union[str, bytes]) -> 'Session':
         if isinstance(token, str):
-            token = binascii.a2b_hex(token)
+            token = bytes.fromhex(token)
         session = Session.objects.get(token=hash_token(token))
         if session.expiry <= datetime.now(timezone.utc):
             session.delete()
@@ -34,7 +34,7 @@ class Session(models.Model):
 
     def dictify(self) -> _SessionDict:
         return {
-            'public_key': binascii.b2a_base64(self.public_key).decode('ascii'),
+            'public_key': base64.b64encode(self.public_key).decode('ascii'),
             'expiry': self.expiry.isoformat(),
             'user': self.user.dictify(),
         } # type: ignore
